@@ -3,18 +3,8 @@
     python scripts/run_baselines.py
     python scripts/run_baselines.py --data data/ks_L22_N64.npz --no-figures
 
-Protocol
---------
-Weather: rollouts start every 2 Lyapunov times along each test trajectory and
-run for 10 Lyapunov times. Reported: median normalised RMSE over time and the
-valid prediction time (first crossing of NRMSE = 0.5), in Lyapunov times.
-
-Climate: each model free-runs for the full test-trajectory length from the
-first test state; the first 12 Lyapunov times are discarded, and the rest is
-compared with the true test trajectories (spectrum, value distribution,
-autocorrelation).
-
-The local rule's radius and input noise are chosen on the validation set only.
+The weather and climate protocol lives in lyapunov_horizon/evaluate.py and is
+shared with every other model. The local rule's radius and input noise are chosen on the validation set only.
 """
 
 import argparse
@@ -28,34 +18,27 @@ import numpy as np
 from lyapunov_horizon.baselines import (Climatology, LinearDMD, LocalPolynomial,
                                         Persistence, PerfectModel, rollout)
 from lyapunov_horizon.data import load
+from lyapunov_horizon.evaluate import (VPT_THRESHOLD, evaluate_climate,
+                                       evaluate_weather)
 from lyapunov_horizon.ks import KS
-from lyapunov_horizon.metrics import (autocorrelation, climate_scores,
-                                      energy_spectrum, nrmse,
-                                      valid_prediction_time)
-
-
-def weather_windows(traj, spacing, horizon):
-    """Start states and true continuations: (n_traj*n_starts, N), (.., horizon+1, N)."""
-    starts = np.arange(0, traj.shape[1] - horizon, spacing)
-    u0 = traj[:, starts].reshape(-1, traj.shape[-1])
-    truth = np.stack([traj[:, s:s + horizon + 1] for s in starts], axis=1)
-    return u0.astype(np.float64), truth.reshape(-1, horizon + 1, traj.shape[-1])
+from lyapunov_horizon.metrics import autocorrelation, energy_spectrum
 
 
 def select_local_rule(ds, spl, log):
     """Pick radius and input noise for the local rule by validation VPT."""
-    u0, truth = weather_windows(ds.val, int(2 * spl), int(8 * spl))
+    # 8 Lyapunov-time rollouts with truncated step counts, kept as originally
+    # run so the selected rule (and hence the published numbers) is unchanged.
     best = None
     for r in (6, 7, 8):
         for noise in (0.01, 0.02, 0.03):
             m = LocalPolynomial(radius=r, input_noise=noise).fit(ds.train)
-            pred = rollout(m, u0, truth.shape[1] - 1)
-            vpt = valid_prediction_time(nrmse(pred, truth, ds.sigma), ds.dt, ds.lambda_1)
-            stable = np.isfinite(pred[:, -1]).all()
-            log(f"    r={r} noise={noise:.2f}σ  val VPT {vpt.mean():.2f}"
+            res = evaluate_weather(m, ds, "val", spacing=int(2 * spl), horizon=int(8 * spl))
+            vpt = res.metrics["vpt_mean"]
+            stable = res.diverged == 0
+            log(f"    r={r} noise={noise:.2f}σ  val VPT {vpt:.2f}"
                 f"{'' if stable else '  (some rollouts diverge)'}")
-            if stable and (best is None or vpt.mean() > best[0]):
-                best = (vpt.mean(), r, noise)
+            if stable and (best is None or vpt > best[0]):
+                best = (vpt, r, noise)
     if best is None:
         raise RuntimeError("no stable local rule found")
     return best[1], best[2]
@@ -94,43 +77,30 @@ def main():
     perfect.name = f"True solver, IC error {a.ic_error:g}σ"
 
     # ------------------------------------------------------------ weather
-    horizon = int(round(10 * spl))
-    u0, truth = weather_windows(ds.test, int(round(2 * spl)), horizon)
-    log(f"Weather: {len(u0)} rollouts of {horizon} steps (10 Lyapunov times)")
-    rng = np.random.default_rng(0)
-    noise_ic = rng.normal(size=u0.shape)
-    noise_ic -= noise_ic.mean(axis=-1, keepdims=True)
-    noise_ic *= a.ic_error * sigma / np.sqrt(np.mean(noise_ic**2, axis=-1, keepdims=True))
-
     results, curves = {}, {}
     for m in models + [perfect]:
-        start = u0 + noise_ic if m is perfect else u0
-        pred = rollout(m, start, horizon)
-        err = nrmse(pred, truth, sigma)
-        vpt = valid_prediction_time(err, ds.dt, ds.lambda_1)
-        curves[m.name] = err
-        results[m.name] = {
-            "one_step_nrmse": float(np.median(err[:, 1])),
-            "vpt_mean": float(vpt.mean()), "vpt_median": float(np.median(vpt)),
-            "vpt_q10": float(np.quantile(vpt, 0.1)), "vpt_q90": float(np.quantile(vpt, 0.9)),
-        }
-        log(f"  {m.name:38s} 1-step {results[m.name]['one_step_nrmse']:.1e}"
-            f"   VPT {vpt.mean():.2f} Lyapunov times")
+        w = evaluate_weather(m, ds, ic_error=a.ic_error if m is perfect else 0.0)
+        if not curves:
+            log(f"Weather: {w.nrmse.shape[0]} rollouts of {w.nrmse.shape[1] - 1} steps "
+                f"(10 Lyapunov times)")
+        curves[m.name] = w.nrmse
+        results[m.name] = w.metrics
+        log(f"  {m.name:38s} 1-step {w.metrics['one_step_nrmse']:.1e}"
+            f"   VPT {w.metrics['vpt_mean']:.2f} Lyapunov times")
 
     # ------------------------------------------------------------ climate
-    burn = int(round(12 * spl))
     T = ds.test.shape[1] - 1
-    true_long = ds.test[:, burn:].astype(np.float64)
-    max_lag = int(round(2 * spl))
-    log(f"Climate: free runs of {T} steps ({T / spl:.0f} Lyapunov times), "
-        f"statistics after {burn} steps")
     long_runs = {}
     for m in models:
         if isinstance(m, Climatology):
             continue
-        run = rollout(m, ds.test[:, 0].astype(np.float64), T)[:, burn:]
-        long_runs[m.name] = run
-        sc = climate_scores(run, true_long, sigma, max_lag=max_lag, k_max=N // 4)
+        c = evaluate_climate(m, ds)
+        if not long_runs:
+            true_long, max_lag = c.truth, c.max_lag
+            log(f"Climate: free runs of {T} steps ({T / spl:.0f} Lyapunov times), "
+                f"statistics after {T + 1 - c.run.shape[1]} steps")
+        long_runs[m.name] = c.run
+        sc = c.metrics
         results[m.name].update(sc)
         log(f"  {m.name:38s} spectrum {sc['spectrum_err']:.2f}  pdf W1 {sc['pdf_w1']:.3f}"
             f"  ACF {sc['acf_err']:.3f}  diverged {sc['diverged']:.0%}")
@@ -140,7 +110,7 @@ def main():
     out.write_text(json.dumps({
         "data": a.data, "lambda_1": ds.lambda_1, "lyapunov_time": ds.lyapunov_time,
         "sigma_u": sigma, "local_rule": {"radius": r, "input_noise": noise},
-        "vpt_threshold": 0.5, "models": results}, indent=2))
+        "vpt_threshold": VPT_THRESHOLD, "models": results}, indent=2))
     log(f"Saved {out}  [{time.time() - t0:.0f}s]")
 
     if not a.no_figures:

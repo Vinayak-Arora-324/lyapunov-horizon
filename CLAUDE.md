@@ -16,7 +16,7 @@ Owner: Vinayak, an MSci Physics student. This is a personal research project, so
 - WSL on Windows. The repo lives at `/mnt/e/Projects/lyapunov-horizon`. It sits on the Windows drive, so file I/O is slower than in the WSL home folder, but computation runs at full speed.
 - CPU only: AMD Ryzen 7 7840HS (8 cores / 16 threads). No CUDA. Keep each training run under ~1 hour.
 - The existing tests passed on Python 3.14. If PyTorch has no wheel for 3.14, create the venv with Python 3.12 (`uv venv --python 3.12`).
-- Set-up: `pip install -e ".[dev]"`, then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (a few minutes), then `pytest` (`-m "not slow"` skips the Lyapunov test).
+- Set-up: `pip install -e ".[dev]"`, then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (~13 min; the local-rule sweep is single-threaded), then `pytest` (`-m "not slow"` skips the Lyapunov test).
 - Run git from WSL only, not Git for Windows as well, to avoid line-ending and file-mode noise.
 
 ## Code layout
@@ -29,11 +29,13 @@ src/lyapunov_horizon/
   baselines.py  Model interface (fit/step), Persistence, Climatology, LinearDMD,
                 LocalPolynomial, PerfectModel, rollout() (NaN-marks blow-ups)
   metrics.py    nrmse, valid_prediction_time, energy_spectrum, autocorrelation, climate_scores
+  evaluate.py   Shared protocol: evaluate_weather(model, ds, split) / evaluate_climate(...)
+                -> WeatherResult / ClimateResult (metrics dict + curves/runs for plots)
   plotting.py   Shared figure style; fixed colour per model (color_for)
 scripts/
   generate_data.py   Lyapunov estimate + train/val/test (64/16/32 trajectories x 4001 snapshots)
   run_baselines.py   Selects the local rule on val, evaluates on test, writes results/ and figures/
-tests/          test_ks.py (solver), test_baselines_metrics.py
+tests/          test_ks.py (solver), test_baselines_metrics.py, test_evaluate.py
 ```
 
 Every model implements `step(u: np.ndarray[B, N]) -> np.ndarray[B, N]`, which advances one snapshot (dt = 0.25). `rollout(model, u0, n_steps)` handles the autoregressive loop and divergence. New models should fit this interface so that all evaluation code is shared.

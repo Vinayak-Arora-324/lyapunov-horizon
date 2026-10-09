@@ -28,7 +28,7 @@ python -m venv .venv
 pip install -e ".[dev]"
 
 python scripts/generate_data.py   # ~1 min: Lyapunov exponent + 64/16/32 train/val/test trajectories
-python scripts/run_baselines.py   # a few minutes: fits, evaluates, writes results/ and figures/
+python scripts/run_baselines.py   # ~13 min (mostly single-threaded): fits, evaluates, writes results/ and figures/
 pytest                             # solver tests (pytest -m "not slow" skips the Lyapunov check)
 ```
 
@@ -67,6 +67,7 @@ src/lyapunov_horizon/
   data.py       dataset generation / loading
   baselines.py  persistence, climatology, DMD, local quadratic rule, rollout()
   metrics.py    NRMSE, valid prediction time, spectrum, distribution, autocorrelation
+  evaluate.py   the shared weather/climate protocol: evaluate_weather(), evaluate_climate()
   plotting.py   shared figure style
 scripts/        generate_data.py, run_baselines.py
 tests/          solver tests
