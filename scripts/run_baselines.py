@@ -24,15 +24,14 @@ from lyapunov_horizon.ks import KS
 from lyapunov_horizon.metrics import autocorrelation, energy_spectrum
 
 
-def select_local_rule(ds, spl, log):
-    """Pick radius and input noise for the local rule by validation VPT."""
-    # 8 Lyapunov-time rollouts with truncated step counts, kept as originally
-    # run so the selected rule (and hence the published numbers) is unchanged.
+def select_local_rule(ds, log):
+    """Pick radius and input noise for the local rule by validation VPT,
+    using the same weather protocol as the test evaluation."""
     best = None
     for r in (6, 7, 8):
         for noise in (0.01, 0.02, 0.03):
             m = LocalPolynomial(radius=r, input_noise=noise).fit(ds.train)
-            res = evaluate_weather(m, ds, "val", spacing=int(2 * spl), horizon=int(8 * spl))
+            res = evaluate_weather(m, ds, "val")
             vpt = res.metrics["vpt_mean"]
             stable = res.diverged == 0
             log(f"    r={r} noise={noise:.2f}σ  val VPT {vpt:.2f}"
@@ -65,7 +64,7 @@ def main():
 
     t0 = time.time()
     log("Selecting the local rule on the validation set...")
-    r, noise = select_local_rule(ds, spl, log)
+    r, noise = select_local_rule(ds, log)
 
     models = [Persistence(), Climatology(), LinearDMD(),
               LocalPolynomial(radius=r, input_noise=noise)]
