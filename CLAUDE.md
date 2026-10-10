@@ -85,11 +85,11 @@ What these results already show (keep these in mind):
   1. One-step MSE with input-noise injection (tune the noise level on val; start around 0.01σ).
   2. Multi-step (unrolled) loss: roll out K steps inside training and backpropagate through the rollout, with a curriculum such as K = 2 → 4 → 8 → 16. This is the standard fix for rollout instability.
 - Optional: data augmentation using the KS symmetries, translation (already built into the FNO) and reflection u(x) → −u(−x).
-- Add the FNO to the figures (`error_growth.png` and `climate.png`) and to the README results table.
+- Add the FNO to the figures (`error_growth.png` and `climate.png`) and to the results table in `documentation.md`.
 
 **Success criteria for step 3:** mean test VPT > 0.94 T_λ (beats the local rule); 0% divergence in 49-T_λ free runs; climate metrics better than the local rule (spectrum error < 0.49, ACF error < 0.37), with the autocorrelation not showing the periodic lock-in.
 
-### Later (roadmap in README)
+### Later (roadmap in `documentation.md`)
 - Probabilistic emulator: ensembles, calibration, CRPS.
 - Latent (JEPA-style) prediction vs. raw-state prediction.
 - Larger domains (L = 44, 100).
@@ -97,5 +97,5 @@ What these results already show (keep these in mind):
 ## Conventions
 - Keep the `Model.step` interface and the shared evaluation; never evaluate a new model with different code than the baselines.
 - Report times in Lyapunov times and errors normalised by σ_u.
-- When a result changes, update the README table and figures in the same change.
+- When a result changes, update the results table in `documentation.md` and the figures in the same change. The README is a short landing page that links to `documentation.md`; keep the detailed docs there.
 - Tests must pass (`pytest -m "not slow"` for quick runs).
