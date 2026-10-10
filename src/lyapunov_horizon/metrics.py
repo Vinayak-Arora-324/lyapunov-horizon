@@ -59,25 +59,33 @@ def autocorrelation(u: np.ndarray, max_lag: int) -> np.ndarray:
 
 def climate_scores(pred: np.ndarray, true: np.ndarray, sigma: float,
                    max_lag: int, k_max: int | None = None,
-                   n_values: int = 200_000, seed: int = 0) -> dict:
+                   n_values: int = 200_000, seed: int = 0,
+                   drop_diverged: bool = False) -> dict:
     """Compare long-run statistics of a free-running model with the truth.
 
     pred, true: (B, T, N) long trajectories (a burn-in already discarded).
+    k_max defaults to N // 4, the protocol's range (the higher modes carry
+    almost no energy, so their log-error would dominate).
     Returns:
-      spectrum_err  mean |log10 E_pred(k) - log10 E_true(k)| over k <= k_max
+      spectrum_err  mean |log10 E_pred(k) - log10 E_true(k)| over 1 <= k <= k_max
       pdf_w1        Wasserstein-1 distance between distributions of u, / sigma
       acf_err       RMS difference of the autocorrelation up to max_lag
       diverged      fraction of rollouts that blew up
+
+    If any rollout diverged, the three statistics are NaN: scoring only the
+    survivors would let a model that usually blows up look as good as one that
+    never does. drop_diverged=True scores the surviving rollouts instead, for
+    diagnostics only (e.g. during training); never use it for reported numbers.
     """
-    diverged = float(np.mean(~np.isfinite(pred).all(axis=(1, 2))))
     ok = np.isfinite(pred).all(axis=(1, 2))
-    if not ok.any():
+    diverged = float(np.mean(~ok))
+    if not ok.any() or (not ok.all() and not drop_diverged):
         return {"spectrum_err": np.nan, "pdf_w1": np.nan, "acf_err": np.nan,
                 "diverged": diverged}
     pred = pred[ok]
 
     Ep, Et = energy_spectrum(pred), energy_spectrum(true)
-    k_max = k_max or len(Et) - 1
+    k_max = true.shape[-1] // 4 if k_max is None else k_max
     with np.errstate(divide="ignore"):
         spec = np.mean(np.abs(np.log10(Ep[1:k_max + 1]) - np.log10(Et[1:k_max + 1])))
 

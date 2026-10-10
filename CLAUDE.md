@@ -13,10 +13,10 @@ Owner: Vinayak, an MSci Physics student. This is a personal research project, so
 
 ## Environment
 
-- WSL on Windows. The repo lives at `/mnt/e/Projects/lyapunov-horizon`. It sits on the Windows drive, so file I/O is slower than in the WSL home folder, but computation runs at full speed.
+- WSL on Windows. The repo lives at `/home/vinayakarora/Projects/lyapunov-horizon`, on the WSL (ext4) filesystem, so file I/O is fast.
 - CPU only: AMD Ryzen 7 7840HS (8 cores / 16 threads). No CUDA. Keep each training run under ~1 hour.
-- The existing tests passed on Python 3.14. If PyTorch has no wheel for 3.14, create the venv with Python 3.12 (`uv venv --python 3.12`).
-- Set-up: `pip install -e ".[dev]"`, then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (~13 min; the local-rule sweep is single-threaded), then `pytest` (`-m "not slow"` skips the Lyapunov test).
+- Venv: `~/.venvs/lyapunov-horizon` (Python 3.14), with the package installed editable from this repo and PyTorch 2.14.1 (CPU build, from `--index-url https://download.pytorch.org/whl/cpu`). If the repo moves, rerun `pip install -e ".[dev]"`, because the editable install records the absolute path.
+- Set-up from scratch: `pip install -e ".[dev]"`, then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (~13 min; the local-rule sweep is single-threaded), then `pytest` (`-m "not slow"` skips the Lyapunov test).
 - Run git from WSL only, not Git for Windows as well, to avoid line-ending and file-mode noise.
 
 ## Code layout
@@ -46,7 +46,7 @@ Every model implements `step(u: np.ndarray[B, N]) -> np.ndarray[B, N]`, which ad
 - λ₁ ≈ 0.049 (literature: 0.048, Cvitanović et al. 2010). Lyapunov time T_λ ≈ 20.4 time units ≈ 82 snapshots. **All times are reported in T_λ.**
 - Errors are normalised by σ_u (the std of the training set, ≈ 1.19). 1.0 = predicting the mean; ≈1.41 = two unrelated attractor states.
 - **Weather:** start a rollout every 2 T_λ along each test trajectory, 10 T_λ long (640 rollouts). Report the median NRMSE curve and the valid prediction time (VPT): the first time NRMSE > 0.5.
-- **Climate:** free-run from each test trajectory's first state for the full length (49 T_λ), discard the first 12 T_λ, compare with the true test data. Metrics: spectrum error (mean |Δlog10 E(k)| for k ≤ N/4), Wasserstein-1 of u / σ, autocorrelation RMS error up to a 2 T_λ lag, and the fraction of runs that diverged.
+- **Climate:** free-run from each test trajectory's first state for the full length (49 T_λ), discard the first 12 T_λ, compare with the true test data. Metrics: spectrum error (mean |Δlog10 E(k)| for k ≤ N/4), Wasserstein-1 of u / σ, autocorrelation RMS error up to a 2 T_λ lag, and the fraction of runs that diverged. If any run diverges, the spectrum, W₁ and ACF scores are NaN: they are never computed on the surviving runs alone (`drop_diverged=True` exists for training diagnostics only).
 - **All hyperparameter and model selection uses the validation split only.** The test split is for final numbers.
 
 ## Current baseline results (test split)

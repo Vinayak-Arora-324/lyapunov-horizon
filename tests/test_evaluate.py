@@ -213,6 +213,22 @@ def test_climate_diverging_model_gives_nan():
     assert np.isnan(res.run).all()
 
 
+def test_climate_partial_divergence_gives_nan_unless_dropped():
+    class BlowsUpWhenLarge(Model):
+        """Persistence, except states with amplitude > 5 double every step."""
+        def step(self, u):
+            return np.where(np.abs(u).max(axis=-1, keepdims=True) > 5, 2 * u, u)
+
+    ds = synthetic_dataset(n_time=200)
+    ds.test[0] *= 10                    # only trajectory 0 starts above the cut
+    strict = evaluate_climate(BlowsUpWhenLarge(), ds).metrics
+    assert strict["diverged"] == 0.25
+    assert np.isnan([strict["spectrum_err"], strict["pdf_w1"], strict["acf_err"]]).all()
+    loose = evaluate_climate(BlowsUpWhenLarge(), ds, drop_diverged=True).metrics
+    assert loose["diverged"] == 0.25
+    assert np.isfinite([loose["spectrum_err"], loose["pdf_w1"], loose["acf_err"]]).all()
+
+
 def test_climate_persistence_fails_autocorrelation_on_real_ks():
     ds = real_dataset()
     res = evaluate_climate(Persistence(), ds)

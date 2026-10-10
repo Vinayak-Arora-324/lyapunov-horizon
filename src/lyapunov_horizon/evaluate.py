@@ -10,7 +10,8 @@ prediction time (VPT) distribution; the NRMSE curves are kept for plotting.
 Climate: the model free-runs from the first state of each trajectory for the
 full trajectory length; the first 12 Lyapunov times are discarded and the rest
 is compared with the true trajectories (spectrum, value distribution,
-autocorrelation up to a 2-Lyapunov-time lag, divergence).
+autocorrelation up to a 2-Lyapunov-time lag, divergence). If any run diverges,
+the three statistics are NaN rather than computed on the survivors.
 """
 
 from __future__ import annotations
@@ -100,11 +101,14 @@ def evaluate_weather(model: Model, ds: Dataset, split: str = "test", *,
 
 def evaluate_climate(model: Model, ds: Dataset, split: str = "test", *,
                      burn_in: int | None = None, max_lag: int | None = None,
-                     k_max: int | None = None) -> ClimateResult:
+                     k_max: int | None = None,
+                     drop_diverged: bool = False) -> ClimateResult:
     """Long-run statistics of `model` free-running from each trajectory's first state.
 
     burn_in, max_lag: in steps; default to the protocol (12 and 2 Lyapunov times).
     k_max: highest wavenumber index in the spectrum error; defaults to N // 4.
+    drop_diverged: score only the runs that stayed finite (diagnostics only; by
+    default any divergence makes the statistics NaN, see climate_scores).
     """
     traj = getattr(ds, split)
     burn = lyapunov_steps(ds, CLIMATE_BURN_IN) if burn_in is None else burn_in
@@ -112,5 +116,6 @@ def evaluate_climate(model: Model, ds: Dataset, split: str = "test", *,
     k_max = traj.shape[-1] // 4 if k_max is None else k_max
     truth = traj[:, burn:].astype(np.float64)
     run = rollout(model, traj[:, 0].astype(np.float64), traj.shape[1] - 1)[:, burn:]
-    metrics = climate_scores(run, truth, ds.sigma, max_lag=max_lag, k_max=k_max)
+    metrics = climate_scores(run, truth, ds.sigma, max_lag=max_lag, k_max=k_max,
+                             drop_diverged=drop_diverged)
     return ClimateResult(metrics, run, truth, max_lag)
