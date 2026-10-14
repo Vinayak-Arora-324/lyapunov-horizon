@@ -32,10 +32,16 @@ src/lyapunov_horizon/
   evaluate.py   Shared protocol: evaluate_weather(model, ds, split) / evaluate_climate(...)
                 -> WeatherResult / ClimateResult (metrics dict + curves/runs for plots)
   plotting.py   Shared figure style; fixed colour per model (color_for)
+  fno.py        FNO1d (spectral + pointwise layers, zero-mean increment), Emulator (u/σ in,
+                scaled increment out, unroll()), FNOModel (numpy Model.step), reflect(), checkpoints
 scripts/
   generate_data.py   Lyapunov estimate + train/val/test (64/16/32 trajectories x 4001 snapshots)
-  run_baselines.py   Selects the local rule on val, evaluates on test, writes results/ and figures/
-tests/          test_ks.py (solver), test_baselines_metrics.py, test_evaluate.py
+  run_baselines.py   Selects the local rule on val, evaluates on test, writes results/ and figures/;
+                     --fno CKPT adds the FNO to the figures (its numbers stay in results/fno.json)
+  train_fno.py       Phase 1 (one-step, input noise) + phase 2 (unrolled curriculum), val selection,
+                     test once; writes checkpoints/<tag>.pt, results/<tag>.json (~25 min)
+results/sweeps/      Val-only runs behind the chosen noise, modes and phase-2 learning rate
+tests/          test_ks.py (solver), test_baselines_metrics.py, test_evaluate.py, test_fno.py
 ```
 
 Every model implements `step(u: np.ndarray[B, N]) -> np.ndarray[B, N]`, which advances one snapshot (dt = 0.25). `rollout(model, u0, n_steps)` handles the autoregressive loop and divergence. New models should fit this interface so that all evaluation code is shared.
@@ -49,13 +55,14 @@ Every model implements `step(u: np.ndarray[B, N]) -> np.ndarray[B, N]`, which ad
 - **Climate:** free-run from each test trajectory's first state for the full length (49 T_λ), discard the first 12 T_λ, compare with the true test data. Metrics: spectrum error (mean |Δlog10 E(k)| for k ≤ N/4), Wasserstein-1 of u / σ, autocorrelation RMS error up to a 2 T_λ lag, and the fraction of runs that diverged. If any run diverges, the spectrum, W₁ and ACF scores are NaN: they are never computed on the surviving runs alone (`drop_diverged=True` exists for training diagnostics only).
 - **All hyperparameter and model selection uses the validation split only.** The test split is for final numbers.
 
-## Current baseline results (test split)
+## Current results (test split)
 
 | Model | 1-step NRMSE | VPT (T_λ) | Spectrum err | W₁ | ACF err |
 |---|---|---|---|---|---|
 | Persistence | 0.038 | 0.22 | 0.11 | 0.03 | 0.71 |
 | Linear (DMD) | 0.038 | 0.22 | 2.60 | 0.74 | 0.64 |
 | Local quadratic (r=7, input noise 0.01σ) | 0.003 | 0.94 | 0.49 | 0.07 | 0.37 |
+| FNO (width 48, 20 modes, 4 layers; noise 0.003σ; phase 2 lr 1e-4) | 0.0001 | 4.51 | 0.07 | 0.003 | 0.004 |
 | True solver, 0.1% initial error | — | 6.1 | — | — | — |
 
 What these results already show (keep these in mind):
@@ -64,6 +71,9 @@ What these results already show (keep these in mind):
 2. **One-step accuracy ≠ stable rollouts.** Without input noise, the local rule is 20× better per step than persistence, yet every rollout blows up. Training on noisy inputs (with clean targets) stabilises it. Expect the same problem with neural models.
 3. **Static statistics can be fooled.** Persistence has a perfect spectrum and distribution because it never moves. The local rule's free runs fall into a near-periodic oscillation (period ≈ 1 T_λ) rather than chaos, and only the autocorrelation catches it. Always report all climate metrics together.
 4. **Chaos sets the ceiling.** Even the exact equations lose the trajectory after ~6 T_λ with a 0.1% initial error.
+5. **FNO: input noise trades weather against climate.** Below 0.003σ the forecast horizon improves slightly, but free runs grow an over-energetic small-scale tail and drift. Selection therefore requires the validation climate to beat the local rule (spectrum < 0.49, ACF < 0.37), not just the best VPT.
+6. **FNO: all scored wavenumbers must be learned modes.** The spectrum error scores k ≤ 16; with 16 FNO modes (k = 0–15) the k = 16 energy was 1.6–3 decades off. Hence 20 modes.
+7. **FNO: phase 2 needs a low learning rate.** At 3e-4 it never beat phase 1; at 1e-4 it raised test VPT 4.08 → 4.51 and cut ACF error 0.012 → 0.004. Which curriculum stage wins (K = 8 vs 16) varies between runs; val VPT is noisy at ±0.5 T_λ between checkpoints.
 
 ## Next steps (in order)
 
@@ -73,18 +83,10 @@ Done: first commit made; data regenerated and baselines reproduced (2026-10-12: 
 ### 2. Refactor the evaluation into the package ✓
 Done: `evaluate.py` holds the protocol, `run_baselines.py` uses it and reproduces `results/baselines.json` bit for bit, and `tests/test_evaluate.py` covers it.
 
-### 3. First neural emulator: a 1D Fourier Neural Operator (PyTorch, CPU)
-- Add torch as an optional dependency (`[project.optional-dependencies] torch = ["torch"]`) so the core package still installs without it.
-- `src/lyapunov_horizon/fno.py`: a small 1D FNO (lifting to width ~32–64, ~4 spectral layers, ~16 Fourier modes, GELU, ~100k–500k params). It's periodic by construction, which matches the domain. Normalise inputs by σ_u. **Predict the increment** u_{n+1} − u_n, scaled.
-- Wrap the trained network in a `Model` subclass whose `step()` takes and returns numpy arrays (`torch.no_grad()`), so `rollout()` and all metrics are reused unchanged.
-- `scripts/train_fno.py`: AdamW, cosine learning-rate schedule, `torch.set_num_threads(8)`, a fixed seed, and logging of train/val loss plus a validation VPT every few epochs. Save checkpoints to `checkpoints/` (add it to `.gitignore`) and final metrics to `results/fno*.json`.
-- Training in two phases:
-  1. One-step MSE with input-noise injection (tune the noise level on val; start around 0.01σ).
-  2. Multi-step (unrolled) loss: roll out K steps inside training and backpropagate through the rollout, with a curriculum such as K = 2 → 4 → 8 → 16. This is the standard fix for rollout instability.
-- Optional: data augmentation using the KS symmetries, translation (already built into the FNO) and reflection u(x) → −u(−x).
-- Add the FNO to the figures (`error_growth.png` and `climate.png`) and to the results table in `documentation.md`.
+### 3. First neural emulator: a 1D Fourier Neural Operator ✓
+Done: `fno.py`, `train_fno.py`, `tests/test_fno.py`, results in `results/fno.json`, figures and `documentation.md` updated. All success criteria met on test: VPT 4.51 T_λ (> 0.94), 0% divergence, spectrum 0.07 (< 0.49), ACF 0.004 (< 0.37), no periodic lock-in. Design choices and the val-only sweeps behind them are in `documentation.md` ("The FNO emulator").
 
-**Success criteria for step 3:** mean test VPT > 0.94 T_λ (beats the local rule); 0% divergence in 49-T_λ free runs; climate metrics better than the local rule (spectrum error < 0.49, ACF error < 0.37), with the autocorrelation not showing the periodic lock-in.
+Open follow-ups: several seeds to put error bars on VPT; whether a longer phase 1 helps (val VPT was still rising at epoch 12); the K = 16 stage's value.
 
 ### Later (roadmap in `documentation.md`)
 - Probabilistic emulator: ensembles, calibration, CRPS.

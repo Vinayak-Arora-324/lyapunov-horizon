@@ -2,9 +2,13 @@
 
     python scripts/run_baselines.py
     python scripts/run_baselines.py --data data/ks_L22_N64.npz --no-figures
+    python scripts/run_baselines.py --fno checkpoints/fno.pt   # add the FNO to the figures
 
 The weather and climate protocol lives in lyapunov_horizon/evaluate.py and is
 shared with every other model. The local rule's radius and input noise are chosen on the validation set only.
+With --fno, a trained FNO checkpoint is evaluated alongside the baselines and
+drawn in the figures; its numbers live in results/fno.json (written by
+train_fno.py), so results/baselines.json keeps the baselines only.
 """
 
 import argparse
@@ -52,6 +56,7 @@ def main():
     p.add_argument("--out", default="results/baselines.json")
     p.add_argument("--figures", default="figures")
     p.add_argument("--no-figures", action="store_true")
+    p.add_argument("--fno", help="trained FNO checkpoint to include in the figures")
     a = p.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")  # model names contain σ (Windows consoles)
     log = lambda s: print(s, flush=True)
@@ -70,6 +75,9 @@ def main():
               LocalPolynomial(radius=r, input_noise=noise)]
     for m in models:
         m.fit(ds.train)
+    if a.fno:
+        from lyapunov_horizon.fno import FNOModel, load_checkpoint
+        models.append(FNOModel(load_checkpoint(a.fno)[0]))
     N = ds.train.shape[-1]
     ks = KS(L=ds.L, N=N)
     perfect = PerfectModel(ks, ds.dt)
@@ -106,10 +114,11 @@ def main():
 
     out = Path(a.out)
     out.parent.mkdir(parents=True, exist_ok=True)
+    baseline_results = {k: v for k, v in results.items() if not k.startswith("FNO")}
     out.write_text(json.dumps({
         "data": a.data, "lambda_1": ds.lambda_1, "lyapunov_time": ds.lyapunov_time,
         "sigma_u": sigma, "local_rule": {"radius": r, "input_noise": noise},
-        "vpt_threshold": VPT_THRESHOLD, "models": results}, indent=2))
+        "vpt_threshold": VPT_THRESHOLD, "models": baseline_results}, indent=2))
     log(f"Saved {out}  [{time.time() - t0:.0f}s]")
 
     if not a.no_figures:
@@ -169,7 +178,7 @@ def make_figures(ds, spl, sigma, models, curves, long_runs, true_long, max_lag, 
     ax.set_xlabel("time since start of rollout  (Lyapunov times)")
     ax.set_ylabel("normalised RMSE")
     ax.set_title("How long does each model track the true trajectory?")
-    ax.legend(loc="lower right", fontsize=9)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=9)
     fig.text(0.01, -0.02, f"Median over {len(err)} test rollouts. An error of ~1.41 means "
              "prediction and truth are unrelated states on the attractor.",
              color=INK_2, fontsize=8.5)

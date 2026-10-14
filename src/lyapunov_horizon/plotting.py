@@ -16,6 +16,7 @@ COLORS = {
     "Linear (DMD)": "#eb6834",         # orange
     "Local quadratic": "#1baf7a",      # aqua
     "True solver": "#4a3aa7",          # violet
+    "FNO": "#d1306f",                  # magenta
 }
 TRUTH = INK
 

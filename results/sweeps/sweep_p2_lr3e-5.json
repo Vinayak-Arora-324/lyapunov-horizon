@@ -1,0 +1,88 @@
+{
+  "data": "data/ks_L22_N64.npz",
+  "args": {
+    "data": "data/ks_L22_N64.npz",
+    "tag": "sweep_p2_lr3e-5",
+    "width": 48,
+    "modes": 20,
+    "layers": 4,
+    "noise": 0.003,
+    "phase1_epochs": 12,
+    "batch": 256,
+    "lr": 0.001,
+    "eval_every": 2,
+    "no_phase2": false,
+    "init": "checkpoints/fno_phase1.pt",
+    "curriculum": "2:1500:128,4:1500:64,8:1500:32,16:1500:32",
+    "lr2": 3e-05,
+    "weight_decay": 0.0001,
+    "clip": 1.0,
+    "threads": 7,
+    "seed": 0,
+    "max_spectrum_err": 0.49,
+    "max_acf_err": 0.37,
+    "skip_test": true
+  },
+  "params": 198625,
+  "increment_scale": 0.06234990805387497,
+  "train_minutes": 20.556520716349283,
+  "phase1_selected": "init checkpoints/fno_phase1.pt",
+  "selected": "phase2 K=8",
+  "history": [
+    {
+      "label": "init checkpoints/fno_phase1.pt",
+      "train_loss": NaN,
+      "val_one_step_nrmse": 0.0001327495856673617,
+      "val_vpt": 4.046814252533798,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 0.07328685776621678,
+      "val_pdf_w1": 0.004239391939373758,
+      "val_acf_err": 0.01169917874855148,
+      "val_diverged": 0.0
+    },
+    {
+      "label": "phase2 K=2",
+      "train_loss": 0.0009288292140699924,
+      "val_one_step_nrmse": 0.00013319639289933937,
+      "val_vpt": 4.162577610584168,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 0.07237154016453873,
+      "val_pdf_w1": 0.0034374980961893137,
+      "val_acf_err": 0.009773955072402342,
+      "val_diverged": 0.0
+    },
+    {
+      "label": "phase2 K=4",
+      "train_loss": 0.0008417927088448778,
+      "val_one_step_nrmse": 0.00012072996282715672,
+      "val_vpt": 4.204293790900797,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 0.0703851468446415,
+      "val_pdf_w1": 0.0061219190052049285,
+      "val_acf_err": 0.02022382854481911,
+      "val_diverged": 0.0
+    },
+    {
+      "label": "phase2 K=8",
+      "train_loss": 0.0008721150413621216,
+      "val_one_step_nrmse": 0.00011162837658629132,
+      "val_vpt": 4.620459615473668,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 0.06476839390338265,
+      "val_pdf_w1": 0.0047694362440337005,
+      "val_acf_err": 0.008004536782048745,
+      "val_diverged": 0.0
+    },
+    {
+      "label": "phase2 K=16",
+      "train_loss": 0.001393137431005016,
+      "val_one_step_nrmse": 0.0001197030994804821,
+      "val_vpt": 4.189162577654637,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 0.06559295953669125,
+      "val_pdf_w1": 0.010166675952772453,
+      "val_acf_err": 0.023182163671434834,
+      "val_diverged": 0.0
+    }
+  ]
+}

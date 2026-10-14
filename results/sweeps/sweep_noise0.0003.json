@@ -1,0 +1,52 @@
+{
+  "data": "data/ks_L22_N64.npz",
+  "args": {
+    "data": "data/ks_L22_N64.npz",
+    "tag": "sweep_noise0.0003",
+    "width": 48,
+    "modes": 16,
+    "layers": 4,
+    "noise": 0.0003,
+    "phase1_epochs": 4,
+    "batch": 256,
+    "lr": 0.001,
+    "eval_every": 2,
+    "no_phase2": true,
+    "curriculum": "2:1500:128,4:1500:64,8:1500:32,16:1500:32",
+    "lr2": 0.0003,
+    "weight_decay": 0.0001,
+    "clip": 1.0,
+    "threads": 7,
+    "seed": 0,
+    "skip_test": true
+  },
+  "params": 161761,
+  "increment_scale": 0.06234990805387497,
+  "train_minutes": 9.171872548262279,
+  "phase1_selected": "phase1 epoch 4",
+  "selected": "phase1 epoch 4",
+  "history": [
+    {
+      "label": "phase1 epoch 2",
+      "train_loss": 0.00018375686632134602,
+      "val_one_step_nrmse": 0.0002461843988674308,
+      "val_vpt": 3.6373138231630344,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 2.031615689339363,
+      "val_pdf_w1": 0.44186551970438,
+      "val_acf_err": 0.2859513284548328,
+      "val_diverged": 0.0
+    },
+    {
+      "label": "phase1 epoch 4",
+      "train_loss": 3.759729351077112e-05,
+      "val_one_step_nrmse": 0.00011411068888849543,
+      "val_vpt": 4.050683246300538,
+      "val_weather_diverged": 0.0,
+      "val_spectrum_err": 1.8497623740185376,
+      "val_pdf_w1": 0.4579981571867808,
+      "val_acf_err": 0.2837974440719516,
+      "val_diverged": 0.0
+    }
+  ]
+}
