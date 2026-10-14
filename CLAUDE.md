@@ -16,7 +16,7 @@ Owner: Vinayak, an MSci Physics student. This is a personal research project, so
 - WSL on Windows. The repo lives at `/home/vinayakarora/Projects/lyapunov-horizon`, on the WSL (ext4) filesystem, so file I/O is fast.
 - CPU only: AMD Ryzen 7 7840HS (8 cores / 16 threads). No CUDA. Keep each training run under ~1 hour.
 - Venv: `~/.venvs/lyapunov-horizon` (Python 3.14), with the package installed editable from this repo and PyTorch 2.14.1 (CPU build, from `--index-url https://download.pytorch.org/whl/cpu`). If the repo moves, rerun `pip install -e ".[dev]"`, because the editable install records the absolute path.
-- Set-up from scratch: `pip install -e ".[dev]"`, then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (~13 min; the local-rule sweep is single-threaded), then `pytest` (`-m "not slow"` skips the Lyapunov test).
+- Set-up from scratch: `pip install -e ".[dev]"` and `pip install torch --index-url https://download.pytorch.org/whl/cpu` (the `torch` extra exists, but PyPI's default wheel pulls in CUDA), then `python scripts/generate_data.py` (~1 min, writes `data/ks_L22_N64.npz`, ~100 MB, git-ignored), then `python scripts/run_baselines.py` (~13 min; the local-rule sweep is single-threaded), then `pytest` (`-m "not slow"` skips the Lyapunov test).
 - Run git from WSL only, not Git for Windows as well, to avoid line-ending and file-mode noise.
 
 ## Code layout
@@ -67,14 +67,11 @@ What these results already show (keep these in mind):
 
 ## Next steps (in order)
 
-### 1. Commit and reproduce
-- Make the first commit (check `git status` first; `.claude/` lock files must not be committed).
-- Regenerate the data, rerun the baselines, and confirm the numbers match `results/baselines.json` closely.
+### 1. Commit and reproduce ✓
+Done: first commit made; data regenerated and baselines reproduced (2026-10-12: same selected rule and table values; the local-rule climate scores differ from `results/baselines.json` by ≤3e-6 relative, floating-point noise from a different numpy/BLAS build amplified by chaotic free runs).
 
-### 2. Refactor the evaluation into the package
-- Move the weather/climate protocol out of `scripts/run_baselines.py` into `src/lyapunov_horizon/evaluate.py`, with functions like `evaluate_weather(model, ds, ...)` and `evaluate_climate(model, ds, ...)` that return metric dicts and the curves needed for plotting.
-- `run_baselines.py` must call these functions and **reproduce the existing results exactly** (same seeds, same windows).
-- Add tests for the new module.
+### 2. Refactor the evaluation into the package ✓
+Done: `evaluate.py` holds the protocol, `run_baselines.py` uses it and reproduces `results/baselines.json` bit for bit, and `tests/test_evaluate.py` covers it.
 
 ### 3. First neural emulator: a 1D Fourier Neural Operator (PyTorch, CPU)
 - Add torch as an optional dependency (`[project.optional-dependencies] torch = ["torch"]`) so the core package still installs without it.

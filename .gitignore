@@ -1,6 +1,9 @@
 # Generated data (regenerate with scripts/generate_data.py)
 data/
 
+# Model checkpoints (regenerate with scripts/train_fno.py)
+checkpoints/
+
 # Python
 __pycache__/
 *.py[cod]
