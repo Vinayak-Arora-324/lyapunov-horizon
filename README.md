@@ -1,10 +1,6 @@
 # lyapunov-horizon
 
-Learned emulators for the 1D Kuramoto–Sivashinsky equation: rollout horizons, long-run statistics and calibration.
-
-The project asks one question: **how far past the chaos-limited prediction horizon can a learned model stay useful?** A model learns to predict the next state from the current one and is then rolled out autoregressively. It is judged on *weather* (how long it tracks the true trajectory, in Lyapunov times) and *climate* (whether it still behaves like the real system after it has diverged). Everything runs on a laptop CPU.
-
-The best model so far, a 199k-parameter Fourier Neural Operator, tracks the true trajectory for **4.5 Lyapunov times** on average (the best baseline manages 0.94; the exact equations started with a 0.1% error manage 6.1), and its free runs keep the right spectrum, value distribution and autocorrelation.
+Can a small neural network learn to forecast a chaotic system, the 1D Kuramoto–Sivashinsky equation, when the equation is deterministic but tiny errors grow exponentially? I found that a 199k-parameter Fourier Neural Operator tracks the true trajectory for about 4.5 Lyapunov times (the best baseline manages 0.94; the exact equations with a 0.1% initial error manage 6.1), and after it diverges its free runs still have the right long-run statistics.
 
 ![True trajectory vs. the local-rule baseline](figures/spacetime.png)
 
